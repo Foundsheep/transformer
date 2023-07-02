@@ -140,6 +140,7 @@ class DataLoader:
         pd.to_pickle(self.df_val, self.save_path_val_pickle)
         print(f"df_val saved at {self.save_path_val_pickle}")
 
+
 if __name__ == '__main__':
     dl = DataLoader()
     _1, _2, _3, _4, _5, _6 = dl.load_dataset()

@@ -50,9 +50,22 @@ class EmbeddingLayer(tf.keras.layers.Layer):
         pass
 
 class Attention(tf.keras.layers.Layer):
-    def __init__(self):
+    def __init__(self, Q, K, V):
         super().__init__()
-        pass
+
+        # make sure Q, K, V are all vectors in batches and Q, K have the same shape
+        assert len(Q.shape) == 2 and len(K.shape) == 2 and len(V.shape) == 2
+        assert Q.shape[-1] == K.shape[-1]
+        self.Q = Q
+        self.K = K
+        self.V = V
+
+    def call(self, Q, K, V):
+        x = tf.linalg.matmul(Q, K, transpose_b=true)
+        x = tf.math.divide(x, tf.math.sqrt(Q.shape[-1]))
+        x = tf.nn.softmax(x)
+        x = tf.linalg.matmul(x, V)
+        return x
 
 def test_class(C, b_size, s_size, **kwargs):
     c = C(**kwargs)
