@@ -50,22 +50,46 @@ class EmbeddingLayer(tf.keras.layers.Layer):
         pass
 
 class Attention(tf.keras.layers.Layer):
-    def __init__(self, Q, K, V):
+    def __init__(self):
         super().__init__()
 
-        # make sure Q, K, V are all vectors in batches and Q, K have the same shape
-        assert len(Q.shape) == 2 and len(K.shape) == 2 and len(V.shape) == 2
-        assert Q.shape[-1] == K.shape[-1]
-        self.Q = Q
-        self.K = K
-        self.V = V
+        # # make sure Q, K, V are all vectors in batches and Q, K have the same shape
+        # assert len(Q.shape) == 2 and len(K.shape) == 2 and len(V.shape) == 2
+        # assert Q.shape[-1] == K.shape[-1]
+        # self.Q = Q
+        # self.K = K
+        # self.V = V
 
     def call(self, Q, K, V):
-        x = tf.linalg.matmul(Q, K, transpose_b=true)
+        x = tf.linalg.matmul(Q, K, transpose_b=True)
         x = tf.math.divide(x, tf.math.sqrt(Q.shape[-1]))
         x = tf.nn.softmax(x)
         x = tf.linalg.matmul(x, V)
         return x
+
+
+class MultiHeadAttention(tf.keras.layers.Layer):
+    def __init__(self, d_k, d_v, d_model, h):
+        super().__init__()
+        self.linear_layer_Q = tf.keras.layers.Dense(units=d_k)
+        self.linear_layer_K = tf.keras.layers.Dense(units=d_k)
+        self.linear_layer_V = tf.keras.layers.Dense(units=d_v)
+        self.attn = Attention()
+        self.concat = tf.keras.layers.concatenate()
+        self.linear_layer_end = tf.keras.layers.Dense(units=d_model)
+        self.h = h
+
+    def call(self, Q_before, K_before, V_before):
+        Q = self.linear_layer_Q(Q_before)
+        K = self.linear_layer_K(K_before)
+        V = self.linear_layer_V(V_before)
+
+        x = self.attn(Q, K, V)
+
+        # for loop(?) and concat afterwards
+        x = self.linear_layer_end(x)
+        return x
+
 
 def test_class(C, b_size, s_size, **kwargs):
     c = C(**kwargs)
