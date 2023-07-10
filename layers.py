@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
 
+
 class EmbeddingLayer(tf.keras.layers.Layer):
     def __init__(self, vocab_size, d_model):
         super().__init__()
@@ -49,6 +50,7 @@ class EmbeddingLayer(tf.keras.layers.Layer):
         # TODO : masking function in decoder
         pass
 
+
 class Attention(tf.keras.layers.Layer):
     def __init__(self):
         super().__init__()
@@ -60,7 +62,8 @@ class Attention(tf.keras.layers.Layer):
         # self.K = K
         # self.V = V
 
-    def call(self, Q, K, V):
+    def call(self, inputs):
+        Q, K, V = inputs
         x = tf.linalg.matmul(Q, K, transpose_b=True)
         x = tf.math.divide(x, tf.math.sqrt(Q.shape[-1]))
         x = tf.nn.softmax(x)
@@ -71,6 +74,7 @@ class Attention(tf.keras.layers.Layer):
 class MultiHeadAttention(tf.keras.layers.Layer):
     def __init__(self, d_k, d_v, d_model, h):
         super().__init__()
+        assert int(d_model / h) == d_k == d_v
         self.linear_layer_Q = tf.keras.layers.Dense(units=d_k)
         self.linear_layer_K = tf.keras.layers.Dense(units=d_k)
         self.linear_layer_V = tf.keras.layers.Dense(units=d_v)
@@ -79,10 +83,11 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         self.linear_layer_end = tf.keras.layers.Dense(units=d_model)
         self.h = h
 
-    def call(self, Q_before, K_before, V_before):
-        Q = self.linear_layer_Q(Q_before)
-        K = self.linear_layer_K(K_before)
-        V = self.linear_layer_V(V_before)
+    def call(self, inputs):
+        _Q, _K, _V = inputs
+        Q = self.linear_layer_Q(_Q)
+        K = self.linear_layer_K(_K)
+        V = self.linear_layer_V(_V)
 
         x = self.attn(Q, K, V)
 
