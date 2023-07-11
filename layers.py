@@ -75,19 +75,36 @@ class MultiHeadAttention(tf.keras.layers.Layer):
     def __init__(self, d_k, d_v, d_model, h):
         super().__init__()
         assert int(d_model / h) == d_k == d_v
-        self.linear_layer_Q = tf.keras.layers.Dense(units=d_k)
-        self.linear_layer_K = tf.keras.layers.Dense(units=d_k)
-        self.linear_layer_V = tf.keras.layers.Dense(units=d_v)
+        self.linear_layer_dict = dict()
+        for i in range(h):
+            self.linear_layer_dict[f"Q_{i}"] = tf.keras.layers.Dense(units=d_k)
+            self.linear_layer_dict[f"K_{i}"] = tf.keras.layers.Dense(units=d_k)
+            self.linear_layer_dict[f"V_{i}"] = tf.keras.layers.Dense(units=d_v)
         self.attn = Attention()
         self.concat = tf.keras.layers.concatenate()
         self.linear_layer_end = tf.keras.layers.Dense(units=d_model)
         self.h = h
 
+    def split_tensors(self, inputs, h):
+        assert len(inputs.shape) == 3
+        batch, length, d_model = inputs.shape
+        inputs = tf.expand_dims(inputs, 1)
+        assert len(inputs.shape) == 4
+        temp_list = []
+        new_channel = int(d_model / h)
+        for idx in range(h):
+            temp_list.append(inputs[:, :, :, idx * new_channel:(idx + 1) * new_channel])
+        inputs = tf.concat(temp_list, axis=1)
+        return inputs
+
     def call(self, inputs):
         _Q, _K, _V = inputs
-        Q = self.linear_layer_Q(_Q)
-        K = self.linear_layer_K(_K)
-        V = self.linear_layer_V(_V)
+        Q_split = self.split_tensors(_Q, self.h)
+        K_split = self.split_tensors(_K, self.h)
+        V_split = self.split_tensors(_V, self.h)
+
+        # for i in range(self.h):
+        #     Q_split[:, i, :, :]
 
         x = self.attn(Q, K, V)
 
