@@ -7,7 +7,8 @@ class EmbeddingLayer(tf.keras.layers.Layer):
     def __init__(self, vocab_size, d_model):
         super().__init__()
         self.d_model = d_model
-        self.emb = tf.keras.layers.Embedding(input_dim=vocab_size, output_dim=d_model)
+        self.vocab_size = vocab_size
+        self.emb = tf.keras.layers.Embedding(input_dim=self.vocab_size, output_dim=self.d_model, dtype=tf.float32)
         pass
 
     def add_positional_encoding(self, x, is_plot=True):
@@ -44,7 +45,10 @@ class EmbeddingLayer(tf.keras.layers.Layer):
         return tf.add(x, pos)
 
     def call(self, x):
-        return self.emb(x)
+        x = self.emb(x)
+        x = self.add_positional_encoding(x, is_plot=True)
+        print(f"=== Embedding done, shape : [{x.shape}]")
+        return x
 
     def masking(self):
         # TODO : masking function in decoder
@@ -55,39 +59,32 @@ class Attention(tf.keras.layers.Layer):
     def __init__(self):
         super().__init__()
 
-        # # make sure Q, K, V are all vectors in batches and Q, K have the same shape
-        # assert len(Q.shape) == 2 and len(K.shape) == 2 and len(V.shape) == 2
-        # assert Q.shape[-1] == K.shape[-1]
-        # self.Q = Q
-        # self.K = K
-        # self.V = V
-
-    def call(self, inputs):
-        Q, K, V = inputs
+    def call(self, Q, K, V):
         x = tf.linalg.matmul(Q, K, transpose_b=True)
-        x = tf.math.divide(x, tf.math.sqrt(Q.shape[-1]))
+        x = tf.math.divide(x, tf.math.sqrt(float(Q.shape[-1])))
         x = tf.nn.softmax(x)
         x = tf.linalg.matmul(x, V)
+        print(f"=== Attention done, shape : [{x.shape}]")
         return x
 
 
 class MultiHeadAttention(tf.keras.layers.Layer):
-    def __init__(self, d_k, d_v, d_model, h):
+    def __init__(self, d_model, h, d_k, d_v):
         super().__init__()
-        assert int(d_model / h) == d_k == d_v
-        self.linear_layer_dict = dict()
-        for i in range(h):
-            self.linear_layer_dict[f"Q_{i}"] = tf.keras.layers.Dense(units=d_k)
-            self.linear_layer_dict[f"K_{i}"] = tf.keras.layers.Dense(units=d_k)
-            self.linear_layer_dict[f"V_{i}"] = tf.keras.layers.Dense(units=d_v)
-        self.attn = Attention()
-        self.concat = tf.keras.layers.concatenate()
-        self.linear_layer_end = tf.keras.layers.Dense(units=d_model)
+        self.d_k = d_k
+        self.d_v = d_v
+        self.d_model = d_model
         self.h = h
+        self.linear_layer_Q = tf.keras.layers.Dense(self.d_k)
+        self.linear_layer_K = tf.keras.layers.Dense(self.d_k)
+        self.linear_layer_V = tf.keras.layers.Dense(self.d_v)
+        self.attn = Attention()
+        # self.concat = tf.keras.layers.concatenate()
+        self.linear_layer_end = tf.keras.layers.Dense(units=self.d_model)
 
     def split_tensors(self, inputs, h):
         assert len(inputs.shape) == 3
-        batch, length, d_model = inputs.shape
+        batch, length, self.d_model = inputs.shape
         inputs = tf.expand_dims(inputs, 1)
         assert len(inputs.shape) == 4
         temp_list = []
@@ -97,19 +94,30 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         inputs = tf.concat(temp_list, axis=1)
         return inputs
 
-    def call(self, inputs):
-        _Q, _K, _V = inputs
-        Q_split = self.split_tensors(_Q, self.h)
-        K_split = self.split_tensors(_K, self.h)
-        V_split = self.split_tensors(_V, self.h)
+    def reshape_tensors(self, inputs):
+        assert len(inputs.shape) == 3
+        batch, length, = inputs.shape[0], inputs.shape[1]
+        new_channel = int(self.d_model / self.h)
+        print(f"=== new_channel : [{new_channel}]")
+        x = tf.reshape(inputs, shape=(batch, length, -1, new_channel))
+        # x = tf.transpose(x, perm=(0, 2, 1, 3))
+        return x
 
-        # for i in range(self.h):
-        #     Q_split[:, i, :, :]
-
-        x = self.attn(Q, K, V)
-
-        # for loop(?) and concat afterwards
+    def call(self, Q, K, V):
+        Q_reshaped = self.reshape_tensors(Q)
+        K_reshaped = self.reshape_tensors(K)
+        V_reshaped = self.reshape_tensors(V)
+        Q_ = self.linear_layer_Q(Q_reshaped)
+        K_ = self.linear_layer_K(K_reshaped)
+        V_ = self.linear_layer_V(V_reshaped)
+        print(f"Q_ shape : [{Q_.shape}")
+        print(f"K_ shape : [{K_.shape}")
+        print(f"V_ shape : [{V_.shape}")
+        x = self.attn(Q_, K_, V_)
+        batch, legnth = Q.shape[0], Q.shape[1]
+        x = tf.reshape(x, shape=(batch, legnth, -1))
         x = self.linear_layer_end(x)
+        print(f"=== Multi-Head attention done, shape : [{x.shape}]")
         return x
 
 
@@ -126,5 +134,27 @@ def test_class(C, b_size, s_size, **kwargs):
     x = c.add_positional_encoding(x, is_plot=True)
     print(f"After adding positional encoding : {x.numpy().shape}")
 
+
 if __name__ == '__main__':
-    test_class(EmbeddingLayer, b_size=64, s_size=100, vocab_size=10000, d_model=512)
+
+    # initialise hyper-parameters
+    d_k = 64
+    d_v = 64
+    b_size = 64
+    s_size = 100
+    vocab_size = 10000
+    d_model = 512
+    h = 8
+
+    # set the values
+    Q = tf.random.uniform(shape=(b_size, s_size), maxval=1000, dtype=tf.int32)
+    K = tf.random.uniform(shape=(b_size, s_size), maxval=1000, dtype=tf.int32)
+    V = tf.random.uniform(shape=(b_size, s_size), maxval=1000, dtype=tf.int32)
+
+    # layers
+    Q_emb = EmbeddingLayer(vocab_size=vocab_size, d_model=d_model)(Q)
+    K_emb = EmbeddingLayer(vocab_size=vocab_size, d_model=d_model)(K)
+    V_emb = EmbeddingLayer(vocab_size=vocab_size, d_model=d_model)(V)
+
+    output = MultiHeadAttention(d_model=d_model, h=h, d_k=d_k, d_v=d_v)(Q_emb, K_emb, V_emb)
+    print(output.shape)
