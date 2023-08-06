@@ -121,6 +121,62 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         return x
 
 
+class FeedFowardNetwork(tf.keras.layers.Layer):
+    def __init__(self, d_model, d_ff=2048):
+        super().__init__()
+        self.d_model = d_model
+        self.linear_1 = tf.keras.layers.Dense(d_ff, use_bias=True)
+        self.linear_2 = tf.keras.layers.Dense(d_model, use_bias=True)
+        self.relu = tf.keras.layers.ReLU
+
+    def call(self, inputs):
+        x = self.linear_1(inputs)
+        x = self.relu(x)
+        x = self.linear_2(x)
+        return x
+
+
+class EncoderBlock(tf.keras.layers.Layer):
+    def __init__(self, d_k, d_v, d_model, h):
+        super().__init__()
+        self.d_k = d_k
+        self.d_v = d_v
+        self.d_model = d_model
+        self.h = h
+        self.add_layer = tf.keras.layers.Add()
+        self.MHA = MultiHeadAttention(d_k=self.d_k, d_v=self.d_v, d_model=self.d_model, h=self.h)
+        self.LN = tf.keras.layers.LayerNormalization()
+        self.FF = FeedFowardNetwork(self.d_model)
+
+    def call(self, inputs, *args, **kwargs):
+        x_ = inputs
+        x = self.MHA(inputs)
+        x = self.add_layer([x, x_])
+        x_ = self.LN(x)
+        x = self.FF(x_)
+        x = self.add_layer([x, x_])
+        return x
+
+
+class Encoder(tf.keras.layers.Layer):
+    def __init__(self, N, d_k, d_v, d_model, h):
+        super().__init__()
+        self.N = N
+        self.d_k = d_k
+        self.d_v = d_v
+        self.d_model =d_model
+        self.h = h
+        self.encoder_dict = {}
+        for i in range(self.N):
+            self.encoder_dict[f"encoder_block_{i}"] = EncoderBlock(d_k=self.d_k, d_v=self.d_v, d_model=self.d_model, h=self.h)
+
+    def call(self, inputs, *args, **kwargs):
+        x = inputs
+        for i in range(self.N):
+            x = self.encoder_dict[f"encoder_block_{i}"](x)
+        return x
+
+
 def test_class(C, b_size, s_size, **kwargs):
     c = C(**kwargs)
 
