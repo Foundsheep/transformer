@@ -44,8 +44,8 @@ class EmbeddingLayer(tf.keras.layers.Layer):
 
         return tf.add(x, pos)
 
-    def call(self, x):
-        x = self.emb(x)
+    def call(self, inputs):
+        x = self.emb(inputs)
         x = self.add_positional_encoding(x, is_plot=True)
         print(f"=== Embedding done, shape : [{x.shape}]")
         return x
@@ -59,7 +59,8 @@ class Attention(tf.keras.layers.Layer):
     def __init__(self):
         super().__init__()
 
-    def call(self, Q, K, V):
+    def call(self, inputs):
+        Q, K, V = inputs
         x = tf.linalg.matmul(Q, K, transpose_b=True)
         x = tf.math.divide(x, tf.math.sqrt(float(Q.shape[-1])))
         x = tf.nn.softmax(x)
@@ -103,7 +104,8 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         # x = tf.transpose(x, perm=(0, 2, 1, 3))
         return x
 
-    def call(self, Q, K, V):
+    def call(self, inputs):
+        Q, K, V = inputs
         Q_reshaped = self.reshape_tensors(Q)
         K_reshaped = self.reshape_tensors(K)
         V_reshaped = self.reshape_tensors(V)
@@ -113,7 +115,8 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         print(f"Q_ shape : [{Q_.shape}")
         print(f"K_ shape : [{K_.shape}")
         print(f"V_ shape : [{V_.shape}")
-        x = self.attn(Q_, K_, V_)
+        inputs = (Q_, K_, V_)
+        x = self.attn(inputs)
         batch, legnth = Q.shape[0], Q.shape[1]
         x = tf.reshape(x, shape=(batch, legnth, -1))
         x = self.linear_layer_end(x)
@@ -149,7 +152,10 @@ class EncoderBlock(tf.keras.layers.Layer):
         self.FF = FeedFowardNetwork(self.d_model)
 
     def call(self, inputs, *args, **kwargs):
-        x_ = inputs
+        if len(inputs) == 3:
+            x_ = inputs[0]
+        else:
+            x_ = inputs
         x = self.MHA(inputs)
         x = self.add_layer([x, x_])
         x_ = self.LN(x)
