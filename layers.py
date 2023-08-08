@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
-
+import numpy as np
 
 class EmbeddingLayer(tf.keras.layers.Layer):
     def __init__(self, vocab_size, d_model):
@@ -50,35 +50,47 @@ class EmbeddingLayer(tf.keras.layers.Layer):
         print(f"=== Embedding done, shape : [{x.shape}]")
         return x
 
-    def masking(self):
-        # TODO : masking function in decoder
-        pass
-
 
 class Attention(tf.keras.layers.Layer):
-    def __init__(self):
+    def __init__(self, is_masking=False):
         super().__init__()
+        self.is_masking = is_masking
+
+    def masking(self, x):
+        assert len(x.shape) == 2
+        result = np.ones_like(x)
+        for i, line in enumerate(x):
+            for j, val in enumerate(line):
+                if i < j:
+                    result[i, j] = -np.inf
+                else:
+                    result[i, j] = val
+        result = tf.convert_to_tensor(result)
+        return result
 
     def call(self, Q, K, V):
         x = tf.linalg.matmul(Q, K, transpose_b=True)
         x = tf.math.divide(x, tf.math.sqrt(float(Q.shape[-1])))
         x = tf.nn.softmax(x)
+        if self.is_masking:
+            x = self.masking(x)
         x = tf.linalg.matmul(x, V)
         print(f"=== Attention done, shape : [{x.shape}]")
         return x
 
 
 class MultiHeadAttention(tf.keras.layers.Layer):
-    def __init__(self, d_model, h, d_k, d_v):
+    def __init__(self, d_model, h, d_k, d_v, is_masking=False):
         super().__init__()
         self.d_k = d_k
         self.d_v = d_v
         self.d_model = d_model
         self.h = h
+        self.is_masking = is_masking
         self.linear_layer_Q = tf.keras.layers.Dense(self.d_k)
         self.linear_layer_K = tf.keras.layers.Dense(self.d_k)
         self.linear_layer_V = tf.keras.layers.Dense(self.d_v)
-        self.attn = Attention()
+        self.attn = Attention(is_masking=self.is_masking)
         # self.concat = tf.keras.layers.concatenate()
         self.linear_layer_end = tf.keras.layers.Dense(units=self.d_model)
 
@@ -116,6 +128,7 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         x = self.attn(Q_, K_, V_)
         batch, legnth = Q.shape[0], Q.shape[1]
         x = tf.reshape(x, shape=(batch, legnth, -1))
+        print(f"=== after reshaping : [{x.shape}]")
         x = self.linear_layer_end(x)
         print(f"=== Multi-Head attention done, shape : [{x.shape}]")
         return x
@@ -181,14 +194,15 @@ class Encoder(tf.keras.layers.Layer):
 
 
 class DecoderBlock(tf.keras.layers.Layer):
-    def __init__(self, d_k, d_v, d_model, h):
+    def __init__(self, d_k, d_v, d_model, h, is_masking):
         super().__init__()
         self.d_k = d_k
         self.d_v = d_v
         self.d_model = d_model
         self.h = h
+        self.is_masking = is_masking
         self.add_layer = tf.keras.layers.Add()
-        self.MHA_1 = MultiHeadAttention(d_k=self.d_k, d_v=self.d_v, d_model=self.d_model, h=self.h)
+        self.MHA_1 = MultiHeadAttention(d_k=self.d_k, d_v=self.d_v, d_model=self.d_model, h=self.h, is_masking=self.is_masking)
         self.MHA_2 = MultiHeadAttention(d_k=self.d_k, d_v=self.d_v, d_model=self.d_model, h=self.h)
         self.LN_1 = tf.keras.layers.LayerNormalization()
         self.LN_2 = tf.keras.layers.LayerNormalization()
@@ -212,16 +226,17 @@ class DecoderBlock(tf.keras.layers.Layer):
 
 
 class Decoder(tf.keras.layers.Layer):
-    def __init__(self, N, d_k, d_v, d_model, h):
+    def __init__(self, N, d_k, d_v, d_model, h, is_masking):
         super().__init__()
         self.N = N
         self.d_k = d_k
         self.d_v = d_v
-        self.d_model =d_model
+        self.d_model = d_model
         self.h = h
+        self.is_masking = is_masking
         self.decoder_dict = {}
         for i in range(self.N):
-            self.decoder_dict[f"decoder_block_{i}"] = DecoderBlock(d_k=self.d_k, d_v=self.d_v, d_model=self.d_model, h=self.h)
+            self.decoder_dict[f"decoder_block_{i}"] = DecoderBlock(d_k=self.d_k, d_v=self.d_v, d_model=self.d_model, h=self.h, is_masking=self.is_masking)
 
     def call(self, Q, K, V, *args, **kwargs):
         x = Q
@@ -274,7 +289,7 @@ if __name__ == '__main__':
     print("output_2:", output_2.shape)
     print("================================================")
 
-    output_3 = Decoder(N=N, d_k=d_k, d_v=d_v, d_model=d_model, h=h)(Q_emb, K_emb, V_emb)
+    output_3 = Decoder(N=N, d_k=d_k, d_v=d_v, d_model=d_model, h=h, is_masking=True)(Q_emb, K_emb, V_emb)
     print("output_3", output_3.shape)
 
 
