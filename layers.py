@@ -1,7 +1,11 @@
+from abc import ABC
+
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
 import numpy as np
+import time
+
 
 class EmbeddingLayer(tf.keras.layers.Layer):
     def __init__(self, vocab_size, d_model):
@@ -57,23 +61,27 @@ class Attention(tf.keras.layers.Layer):
         self.is_masking = is_masking
 
     def masking(self, x):
-        assert len(x.shape) == 2
+        start = time.time()
+        assert len(x.shape) == 3
         result = np.ones_like(x)
-        for i, line in enumerate(x):
-            for j, val in enumerate(line):
-                if i < j:
-                    result[i, j] = -np.inf
-                else:
-                    result[i, j] = val
+        for b_idx, b in enumerate(x):
+            for i, line in enumerate(b):
+                for j, val in enumerate(line):
+                    if i < j:
+                        result[b_idx, i, j] = -np.inf
+                    else:
+                        result[b_idx, i, j] = val
         result = tf.convert_to_tensor(result)
+        end = time.time()
+        print(f"===masking done, shape: [{result.shape}], time took [{end - start}]")
         return result
 
     def call(self, Q, K, V):
         x = tf.linalg.matmul(Q, K, transpose_b=True)
         x = tf.math.divide(x, tf.math.sqrt(float(Q.shape[-1])))
-        x = tf.nn.softmax(x)
         if self.is_masking:
             x = self.masking(x)
+        x = tf.nn.softmax(x)
         x = tf.linalg.matmul(x, V)
         print(f"=== Attention done, shape : [{x.shape}]")
         return x
@@ -87,11 +95,11 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         self.d_model = d_model
         self.h = h
         self.is_masking = is_masking
-        self.linear_layer_Q = tf.keras.layers.Dense(self.d_k)
-        self.linear_layer_K = tf.keras.layers.Dense(self.d_k)
-        self.linear_layer_V = tf.keras.layers.Dense(self.d_v)
-        self.attn = Attention(is_masking=self.is_masking)
-        # self.concat = tf.keras.layers.concatenate()
+        self.linear_layer_Q_list = [tf.keras.layers.Dense(self.d_k) for _ in range(h)]
+        self.linear_layer_K_list = [tf.keras.layers.Dense(self.d_k) for _ in range(h)]
+        self.linear_layer_V_list = [tf.keras.layers.Dense(self.d_v) for _ in range(h)]
+        self.attention_list = [Attention(is_masking=self.is_masking) for _ in range(h)]
+        self.concat = tf.keras.layers.Concatenate()
         self.linear_layer_end = tf.keras.layers.Dense(units=self.d_model)
 
     def split_tensors(self, inputs, h):
@@ -111,23 +119,24 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         batch, length, = inputs.shape[0], inputs.shape[1]
         new_channel = int(self.d_model / self.h)
         print(f"=== new_channel : [{new_channel}]")
-        x = tf.reshape(inputs, shape=(batch, length, -1, new_channel))
+        x = tf.reshape(inputs, shape=(batch, -1, length, new_channel))
         # x = tf.transpose(x, perm=(0, 2, 1, 3))
+        print(F"=== dividing by head number... shape: [{x.shape}]")
         return x
 
     def call(self, Q, K, V):
         Q_reshaped = self.reshape_tensors(Q)
         K_reshaped = self.reshape_tensors(K)
         V_reshaped = self.reshape_tensors(V)
-        Q_ = self.linear_layer_Q(Q_reshaped)
-        K_ = self.linear_layer_K(K_reshaped)
-        V_ = self.linear_layer_V(V_reshaped)
-        print(f"Q_ shape : [{Q_.shape}")
-        print(f"K_ shape : [{K_.shape}")
-        print(f"V_ shape : [{V_.shape}")
-        x = self.attn(Q_, K_, V_)
-        batch, legnth = Q.shape[0], Q.shape[1]
-        x = tf.reshape(x, shape=(batch, legnth, -1))
+        Q_projected_list = [self.linear_layer_Q_list[i](Q_reshaped[:, i, :, :]) for i in range(h)]
+        K_projected_list = [self.linear_layer_K_list[i](K_reshaped[:, i, :, :]) for i in range(h)]
+        V_projected_list = [self.linear_layer_V_list[i](V_reshaped[:, i, :, :]) for i in range(h)]
+        print(f"Q_projected shape : [{Q_projected_list[0].shape}]")
+        print(f"K_projected shape : [{K_projected_list[0].shape}]")
+        print(f"V_projected shape : [{V_projected_list[0].shape}]")
+        attention_result_list = [self.attention_list[i](Q_projected_list[i], K_projected_list[i], V_projected_list[i]) for i in range(h)]
+        print(f"attention_list element shape: [{attention_result_list[0].shape}]")
+        x = self.concat(attention_result_list)
         print(f"=== after reshaping : [{x.shape}]")
         x = self.linear_layer_end(x)
         print(f"=== Multi-Head attention done, shape : [{x.shape}]")
@@ -243,6 +252,32 @@ class Decoder(tf.keras.layers.Layer):
         for i in range(self.N):
             x = self.decoder_dict[f"decoder_block_{i}"](x, K, V)
         return x
+
+
+class Transformer(tf.keras.Model, ABC):
+    def __init__(self, d_k, d_v, d_model, vocab_size, h, N):
+        super().__init__()
+        self.d_k = d_k
+        self.d_v = d_v
+        self.d_model = d_model
+        self.vocab_size = vocab_size
+        self.h = h
+        self.N = N
+        self.enc_embedding_layer = EmbeddingLayer(self.d_model, self.vocab_size)
+        self.dec_embedding_layer = EmbeddingLayer(self.d_model, self.vocab_size)
+        self.encoder = Encoder(d_k=self.d_k, d_v=self.d_v, d_model=self.d_model, h=self.h, N=self.N)
+        self.decoder = Decoder(d_k=self.d_k, d_v=self.d_v, d_model=self.d_model, h=self.h, N=self.N, is_masking=True)
+        self.last_linear = tf.keras.layers.Dense(self.d_model)
+        self.last_softmax = tf.keras.layers.Softmax()
+
+    def call(self, input_enc, input_dec, training=None, mask=None):
+        emb_enc = self.enc_embedding_layer(input_enc)
+        emb_dec = self.dec_embedding_layer(input_dec)
+        enc_output = self.encoder(Q=emb_enc, K=emb_enc, V=emb_enc)
+        dec_output = self.decoder(Q=emb_dec, K=enc_output, V=enc_output)
+        outputs = self.last_linear(dec_output)
+        outputs = self.last_softmax(outputs)
+        return outputs
 
 
 def test_class(C, b_size, s_size, **kwargs):
