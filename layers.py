@@ -34,7 +34,7 @@ class EmbeddingLayer(tf.keras.layers.Layer):
 
         # calculate the core part
         pos = x_axis / (10000 ** (y_axis / D))
-        pos = pos.numpy() # to numpy because tensor doesn't support direct assignment
+        pos = pos.numpy()  # to numpy because tensor doesn't support direct assignment
         pos[:, 0::2] = np.sin(pos[:, 0::2])
         pos[:, 1::2] = np.cos(pos[:, 1::2])
 
@@ -65,15 +65,16 @@ class Attention(tf.keras.layers.Layer):
         assert len(x.shape) == 3
         result = np.ones_like(x)
         for b_idx, b in enumerate(x):
+            sequence_length = len(b)
             for i, line in enumerate(b):
-                for j, val in enumerate(line):
-                    if i < j:
-                        result[b_idx, i, j] = -np.inf
-                    else:
-                        result[b_idx, i, j] = val
+                if i != sequence_length - 1:
+                    result[b_idx, i, i+1:] = -np.inf
+                    result[b_idx, i, :i+1] = line[:i+1]
+                else:
+                    result[b_idx, i, :] = line
         result = tf.convert_to_tensor(result)
         end = time.time()
-        print(f"===masking done, shape: [{result.shape}], time took [{end - start}]")
+        print(f"===masking done, shape: [{result.shape}], time took [{end - start :.3f}] seconds")
         return result
 
     def call(self, Q, K, V):
@@ -263,35 +264,31 @@ class Transformer(tf.keras.Model, ABC):
         self.vocab_size = vocab_size
         self.h = h
         self.N = N
-        self.enc_embedding_layer = EmbeddingLayer(self.d_model, self.vocab_size)
-        self.dec_embedding_layer = EmbeddingLayer(self.d_model, self.vocab_size)
+        self.enc_embedding_layer = EmbeddingLayer(d_model=self.d_model, vocab_size=self.vocab_size)
+        self.dec_embedding_layer = EmbeddingLayer(d_model=self.d_model, vocab_size=self.vocab_size)
         self.encoder = Encoder(d_k=self.d_k, d_v=self.d_v, d_model=self.d_model, h=self.h, N=self.N)
         self.decoder = Decoder(d_k=self.d_k, d_v=self.d_v, d_model=self.d_model, h=self.h, N=self.N, is_masking=True)
-        self.last_linear = tf.keras.layers.Dense(self.d_model)
+        self.last_linear = tf.keras.layers.Dense(self.vocab_size)
         self.last_softmax = tf.keras.layers.Softmax()
 
-    def call(self, input_enc, input_dec, training=None, mask=None):
-        emb_enc = self.enc_embedding_layer(input_enc)
-        emb_dec = self.dec_embedding_layer(input_dec)
-        enc_output = self.encoder(Q=emb_enc, K=emb_enc, V=emb_enc)
-        dec_output = self.decoder(Q=emb_dec, K=enc_output, V=enc_output)
-        outputs = self.last_linear(dec_output)
-        outputs = self.last_softmax(outputs)
-        return outputs
-
-
-def test_class(C, b_size, s_size, **kwargs):
-    c = C(**kwargs)
-
-    # Expects to receive (batch_size, sequence_size) shape
-    x = tf.random.uniform(shape=(b_size, s_size), maxval=1000, dtype=tf.int32)
-    print(f"test case original shape : {x.numpy().shape}")
-    x = c(x)
-    print(f"test case afterwards shape : {x.numpy().shape}")
-    print(f"type of the return value : {type(x)}")
-
-    x = c.add_positional_encoding(x, is_plot=True)
-    print(f"After adding positional encoding : {x.numpy().shape}")
+    def call(self, inputs, training=True, mask=None):
+        input_enc, input_dec = inputs
+        if training:
+            emb_enc = self.enc_embedding_layer(input_enc)
+            emb_dec = self.dec_embedding_layer(input_dec)
+            enc_output = self.encoder(Q=emb_enc, K=emb_enc, V=emb_enc)
+            dec_output = self.decoder(Q=emb_dec, K=enc_output, V=enc_output)
+            outputs = self.last_linear(dec_output)
+            outputs = self.last_softmax(outputs)
+            return outputs
+        else:
+            emb_enc = self.enc_embedding_layer(input_enc)
+            emb_dec = self.dec_embedding_layer(input_dec)
+            enc_output = self.encoder(Q=emb_enc, K=emb_enc, V=emb_enc)
+            dec_output = self.decoder(Q=emb_dec, K=enc_output, V=enc_output)
+            outputs = self.last_linear(dec_output)
+            outputs = self.last_softmax(outputs)
+            return outputs
 
 
 if __name__ == '__main__':
@@ -307,24 +304,31 @@ if __name__ == '__main__':
     N = 6
 
     # set the values
-    Q = tf.random.uniform(shape=(b_size, s_size), maxval=1000, dtype=tf.int32)
-    K = tf.random.uniform(shape=(b_size, s_size), maxval=1000, dtype=tf.int32)
-    V = tf.random.uniform(shape=(b_size, s_size), maxval=1000, dtype=tf.int32)
+    Q = tf.random.uniform(shape=(b_size, s_size), maxval=512, dtype=tf.int32)
+    K = tf.random.uniform(shape=(b_size, s_size), maxval=512, dtype=tf.int32)
+    V = tf.random.uniform(shape=(b_size, s_size), maxval=512, dtype=tf.int32)
 
-    # layers
-    Q_emb = EmbeddingLayer(vocab_size=vocab_size, d_model=d_model)(Q)
-    K_emb = EmbeddingLayer(vocab_size=vocab_size, d_model=d_model)(K)
-    V_emb = EmbeddingLayer(vocab_size=vocab_size, d_model=d_model)(V)
+    # # layers
+    # Q_emb = EmbeddingLayer(vocab_size=vocab_size, d_model=d_model)(Q)
+    # K_emb = EmbeddingLayer(vocab_size=vocab_size, d_model=d_model)(K)
+    # V_emb = EmbeddingLayer(vocab_size=vocab_size, d_model=d_model)(V)
+    #
+    # output = MultiHeadAttention(d_model=d_model, h=h, d_k=d_k, d_v=d_v)(Q_emb, K_emb, V_emb)
+    # print("output:", output.shape)
+    # print("================================================")
+    #
+    # output_2 = Encoder(N=N, d_k=d_k, d_v=d_v, d_model=d_model, h=h)(Q_emb, K_emb, V_emb)
+    # print("output_2:", output_2.shape)
+    # print("================================================")
+    #
+    # output_3 = Decoder(N=N, d_k=d_k, d_v=d_v, d_model=d_model, h=h, is_masking=True)(Q_emb, K_emb, V_emb)
+    # print("output_3", output_3.shape)
 
-    output = MultiHeadAttention(d_model=d_model, h=h, d_k=d_k, d_v=d_v)(Q_emb, K_emb, V_emb)
-    print("output:", output.shape)
-    print("================================================")
-
-    output_2 = Encoder(N=N, d_k=d_k, d_v=d_v, d_model=d_model, h=h)(Q_emb, K_emb, V_emb)
-    print("output_2:", output_2.shape)
-    print("================================================")
-
-    output_3 = Decoder(N=N, d_k=d_k, d_v=d_v, d_model=d_model, h=h, is_masking=True)(Q_emb, K_emb, V_emb)
-    print("output_3", output_3.shape)
+    # TODO : learning schedule
+    # TODO : adam optimizer
+    # TODO : dropout
+    transformer = Transformer(d_k=d_k, d_v=d_v, d_model=d_model, vocab_size=vocab_size, h=h, N=N)
+    transformer.compile(optimizer="adam", loss="cross_entropy", run_eagerly=True)
+    transformer.fit((Q, K), epochs=5)
 
 
