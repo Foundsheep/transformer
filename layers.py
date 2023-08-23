@@ -13,7 +13,8 @@ class EmbeddingLayer(tf.keras.layers.Layer):
         self.d_model = d_model
         self.vocab_size = vocab_size
         self.emb = tf.keras.layers.Embedding(input_dim=self.vocab_size, output_dim=self.d_model, dtype=tf.float32)
-        pass
+
+        # TODO : sums of embeddings, positional encoding -> dropout needed
 
     def add_positional_encoding(self, x, is_plot=True):
         """
@@ -102,6 +103,7 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         self.attention_list = [Attention(is_masking=self.is_masking) for _ in range(h)]
         self.concat = tf.keras.layers.Concatenate()
         self.linear_layer_end = tf.keras.layers.Dense(units=self.d_model)
+        self.drop_out = tf.keras.layers.Dropout(rate=0.1)
 
     def split_tensors(self, inputs, h):
         assert len(inputs.shape) == 3
@@ -140,6 +142,7 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         x = self.concat(attention_result_list)
         print(f"=== after reshaping : [{x.shape}]")
         x = self.linear_layer_end(x)
+        x = self.drop_out(x)
         print(f"=== Multi-Head attention done, shape : [{x.shape}]")
         return x
 
@@ -151,11 +154,13 @@ class FeedFowardNetwork(tf.keras.layers.Layer):
         self.linear_1 = tf.keras.layers.Dense(d_ff, use_bias=True)
         self.linear_2 = tf.keras.layers.Dense(d_model, use_bias=True)
         self.relu = tf.keras.layers.ReLU()
+        self.drop_out = tf.keras.layers.Dropout(rate=0.1)
 
     def call(self, inputs):
         x = self.linear_1(inputs)
         x = self.relu(x)
         x = self.linear_2(x)
+        x = self.drop_out(x)
         return x
 
 
@@ -190,7 +195,7 @@ class Encoder(tf.keras.layers.Layer):
         self.N = N
         self.d_k = d_k
         self.d_v = d_v
-        self.d_model =d_model
+        self.d_model = d_model
         self.h = h
         self.encoder_dict = {}
         for i in range(self.N):
@@ -337,7 +342,6 @@ if __name__ == '__main__':
     # output_3 = Decoder(N=N, d_k=d_k, d_v=d_v, d_model=d_model, h=h, is_masking=True)(Q_emb, K_emb, V_emb)
     # print("output_3", output_3.shape)
 
-    # TODO : learning schedule
     # TODO : adam optimizer
     # TODO : dropout
     transformer = Transformer(d_k=d_k, d_v=d_v, d_model=d_model, vocab_size=vocab_size, h=h, N=N)
