@@ -291,6 +291,19 @@ class Transformer(tf.keras.Model, ABC):
             return outputs
 
 
+class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
+    def __init__(self, d_model, warmup_steps=4000):
+        super().__init__()
+        self.d_model = tf.cast(d_model, tf.float32)
+        self.warmup_steps = warmup_steps
+
+    def __call__(self, step):
+        step = tf.cast(step, dtype=tf.float32)
+        elm_1 = step ** -0.5
+        elm_2 = step * (self.warmup_steps ** -1.5)
+        return (self.d_model ** -0.5) * tf.math.minimum(elm_1, elm_2)
+
+
 if __name__ == '__main__':
 
     # initialise hyper-parameters
