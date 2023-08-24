@@ -10,3 +10,10 @@
 ### Dataset
 
 - will be added
+
+### Reference
+
+- https://www.tensorflow.org/text/tutorials/transformer
+- https://arxiv.org/pdf/1706.03762.pdf
+- https://machinelearningmastery.com/implementing-the-transformer-encoder-from-scratch-in-tensorflow-and-keras/
+- https://github.com/hyunwoongko/transformer

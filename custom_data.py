@@ -26,6 +26,7 @@ class DataLoader:
         if not os.path.exists(self.save_path_ko_dict):
             print("--- 1.1. No data exists")
             with open(self.path_enkr_train, 'r') as f:
+                print(f"--- 1.1.1 path : {self.path_enkr_train}")
                 enkr_train = json.load(f)
 
             with open(self.path_enkr_val, 'r') as f:
