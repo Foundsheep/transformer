@@ -1,5 +1,7 @@
 from layers import Transformer, CustomSchedule
-from custom_data import DataLoader
+from data_prep import DataLoader
+
+from pathlib import Path
 
 
 def train(d_k, d_v, d_model, vocab_size, h):
@@ -7,7 +9,8 @@ def train(d_k, d_v, d_model, vocab_size, h):
     # data preparation
     dl = DataLoader()
     ko_dict, ko_dict_inv, en_dict, en_dict_inv, df_train, df_val = dl.load_dataset()
-    dl.save_data()
+    if not dl.save_path_ko_dict.exists():
+        dl.save_data()
 
     # model generation
     transformer_model = Transformer(d_k=d_k, d_v=d_v, d_model=d_model, vocab_size=vocab_size, h=h)

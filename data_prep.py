@@ -121,8 +121,8 @@ class DataLoader:
 
         SOS = [1]
         EOS = [2]
-        return df[col_name].map(lambda xx: SOS + [col_dict[x] for x in tokenize_func(xx)] + EOS \
-            if len(tokenize_func(xx)) == max_token \
+        return df[col_name].map(lambda xx: SOS + [col_dict[x] for x in tokenize_func(xx)][:max_token] + EOS \
+            if len(tokenize_func(xx)) >= max_token \
             else SOS + [col_dict[x] for x in tokenize_func(xx)] + EOS + [0] * (max_token - len(tokenize_func(xx))))
 
     def save_data(self):
@@ -140,6 +140,8 @@ class DataLoader:
 
         pd.to_pickle(self.df_val, self.save_path_val_pickle)
         print(f"df_val saved at {self.save_path_val_pickle}")
+
+    # def convert_to_ds(self):
 
 
 if __name__ == '__main__':
