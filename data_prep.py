@@ -123,7 +123,7 @@ class DataLoader:
         EOS = [2]
         return df[col_name].map(lambda xx: SOS + [col_dict[x] for x in tokenize_func(xx)] + EOS \
             if len(tokenize_func(xx)) == max_token \
-            else SOS + [col_dict[x] for x in tokenize_func(xx)] + [0] * (max_token - len(tokenize_func(xx))) + EOS)
+            else SOS + [col_dict[x] for x in tokenize_func(xx)] + EOS + [0] * (max_token - len(tokenize_func(xx))))
 
     def save_data(self):
         print("--- 4. Save the data")
