@@ -118,6 +118,7 @@ class DataLoader:
 
         elif col_name == 'en':
             tokenize_func = wordpunct_tokenize
+            max_token += 1  # English to have one more word shifted
 
         SOS = [1]
         EOS = [2]
@@ -141,7 +142,10 @@ class DataLoader:
         pd.to_pickle(self.df_val, self.save_path_val_pickle)
         print(f"df_val saved at {self.save_path_val_pickle}")
 
-    # def convert_to_ds(self):
+    def convert_to_ds(self, ko_tokenized, en_tokenized):
+        # prepare Korean
+        ko_df = pd.DataFrame.from_dict(dict(zip(ko_tokenized.index, ko_tokenized.values))).T  # transpose to (52, 100000) -> (100000, 52)
+
 
 
 if __name__ == '__main__':
