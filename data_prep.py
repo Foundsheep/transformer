@@ -11,6 +11,29 @@ from nltk.tokenize import wordpunct_tokenize
 
 # TODO : argparse
 
+
+def convert_to_ds(ko_tokenized, en_tokenized):
+    # prepare Korean
+    ko_df = pd.DataFrame.from_dict(dict(zip(ko_tokenized.index, ko_tokenized.values))).T  # transpose to (52, 100000) -> (100000, 52)
+    en_df = pd.DataFrame.from_dict(dict(zip(en_tokenized.index, en_tokenized.values))).T  # transpose to (53, 100000) -> (100000, 53)
+
+    ko_inputs = tf.convert_to_tensor(ko_df)
+    en_inputs = tf.convert_to_tensor(en_df.iloc[:, :-1])  # drop EOS token
+    en_labels = tf.convert_to_tensor(en_df.iloc[:, 1:])  # drop SOS token
+    print(f"ko_inputs shape : {ko_inputs.shape}")
+    print(f"en_inputs shape : {en_inputs.shape}")
+    print(f"en_labels shape : {en_labels.shape}")
+    ds = tf.data.Dataset.from_tensor_slices(((ko_inputs, en_inputs), en_labels))
+    return ds
+
+
+def make_batches(ds, buffer_size=10000, batch_size=32):
+    ds = ds.shuffle(buffer_size)
+    ds = ds.batch(batch_size)
+    ds = ds.prefetch(buffer_size=tf.data.AUTOTUNE)
+    return ds
+
+
 class DataLoader:
     def __init__(self):
         self.root_folder = Path().cwd()/'dataset'/'01.데이터'
@@ -124,7 +147,7 @@ class DataLoader:
         EOS = [2]
         return df[col_name].map(lambda xx: SOS + [col_dict[x] for x in tokenize_func(xx)][:max_token] + EOS \
             if len(tokenize_func(xx)) >= max_token \
-            else SOS + [col_dict[x] for x in tokenize_func(xx)] + EOS + [0] * (max_token - len(tokenize_func(xx))))
+            else SOS + [col_dict[x] for x in tokenize_func(xx)] + [0] * (max_token - len(tokenize_func(xx))) + EOS)
 
     def save_data(self):
         print("--- 4. Save the data")
@@ -141,11 +164,6 @@ class DataLoader:
 
         pd.to_pickle(self.df_val, self.save_path_val_pickle)
         print(f"df_val saved at {self.save_path_val_pickle}")
-
-    def convert_to_ds(self, ko_tokenized, en_tokenized):
-        # prepare Korean
-        ko_df = pd.DataFrame.from_dict(dict(zip(ko_tokenized.index, ko_tokenized.values))).T  # transpose to (52, 100000) -> (100000, 52)
-
 
 
 if __name__ == '__main__':
