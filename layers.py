@@ -51,7 +51,8 @@ class EmbeddingLayer(tf.keras.layers.Layer):
 
     def call(self, inputs):
         x = self.emb(inputs)
-        x = self.add_positional_encoding(x, is_plot=True)
+        x = tf.py_function(func=self.add_positional_encoding, inp=[x, True], Tout=tf.float32)
+        # x = self.add_positional_encoding(x, is_plot=True)
         print(f"=== Embedding done, shape : [{x.shape}]")
         return x
 
@@ -118,7 +119,7 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         return inputs
 
     def reshape_tensors(self, inputs):
-        assert len(inputs.shape) == 3
+        # assert len(inputs.shape) == 3
         batch, length, = inputs.shape[0], inputs.shape[1]
         new_channel = int(self.d_model / self.h)
         print(f"=== new_channel : [{new_channel}]")
