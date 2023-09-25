@@ -120,7 +120,7 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
     def reshape_tensors(self, inputs):
         # assert len(inputs.shape) == 3
-        batch, length, = inputs.shape[0], inputs.shape[1]
+        batch, length, = 64, 52  # TODO : hard-carding to be modified
         new_channel = int(self.d_model / self.h)
         print(f"=== new_channel : [{new_channel}]")
         x = tf.reshape(inputs, shape=(batch, -1, length, new_channel))
@@ -132,13 +132,13 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         Q_reshaped = self.reshape_tensors(Q)
         K_reshaped = self.reshape_tensors(K)
         V_reshaped = self.reshape_tensors(V)
-        Q_projected_list = [self.linear_layer_Q_list[i](Q_reshaped[:, i, :, :]) for i in range(h)]
-        K_projected_list = [self.linear_layer_K_list[i](K_reshaped[:, i, :, :]) for i in range(h)]
-        V_projected_list = [self.linear_layer_V_list[i](V_reshaped[:, i, :, :]) for i in range(h)]
+        Q_projected_list = [self.linear_layer_Q_list[i](Q_reshaped[:, i, :, :]) for i in range(self.h)]
+        K_projected_list = [self.linear_layer_K_list[i](K_reshaped[:, i, :, :]) for i in range(self.h)]
+        V_projected_list = [self.linear_layer_V_list[i](V_reshaped[:, i, :, :]) for i in range(self.h)]
         print(f"Q_projected shape : [{Q_projected_list[0].shape}]")
         print(f"K_projected shape : [{K_projected_list[0].shape}]")
         print(f"V_projected shape : [{V_projected_list[0].shape}]")
-        attention_result_list = [self.attention_list[i](Q_projected_list[i], K_projected_list[i], V_projected_list[i]) for i in range(h)]
+        attention_result_list = [self.attention_list[i](Q_projected_list[i], K_projected_list[i], V_projected_list[i]) for i in range(self.h)]
         print(f"attention_list element shape: [{attention_result_list[0].shape}]")
         x = self.concat(attention_result_list)
         print(f"=== after reshaping : [{x.shape}]")
@@ -278,19 +278,23 @@ class Transformer(tf.keras.Model, ABC):
         self.last_softmax = tf.keras.layers.Softmax()
 
     def call(self, inputs, training=True, mask=None):
-        input_enc, input_dec = inputs
+        input_Q, input_K, input_V = inputs[0][0], inputs[0][1], inputs[1]
         if training:
-            emb_enc = self.enc_embedding_layer(input_enc)
-            emb_dec = self.dec_embedding_layer(input_dec)
-            enc_output = self.encoder(Q=emb_enc, K=emb_enc, V=emb_enc)
+            emb_Q = self.enc_embedding_layer(input_Q)
+            emb_K = self.enc_embedding_layer(input_K)
+            emb_V = self.enc_embedding_layer(input_V)
+            emb_dec = self.dec_embedding_layer(input_V)
+            enc_output = self.encoder(Q=emb_Q, K=emb_K, V=emb_V)
             dec_output = self.decoder(Q=emb_dec, K=enc_output, V=enc_output)
             outputs = self.last_linear(dec_output)
             outputs = self.last_softmax(outputs)
             return outputs
         else:
-            emb_enc = self.enc_embedding_layer(input_enc)
-            emb_dec = self.dec_embedding_layer(input_dec)
-            enc_output = self.encoder(Q=emb_enc, K=emb_enc, V=emb_enc)
+            emb_Q = self.enc_embedding_layer(input_Q)
+            emb_K = self.enc_embedding_layer(input_K)
+            emb_V = self.enc_embedding_layer(input_V)
+            emb_dec = self.dec_embedding_layer(ipnut_V)
+            enc_output = self.encoder(Q=emb_Q, K=emb_K, V=emb_V)
             dec_output = self.decoder(Q=emb_dec, K=enc_output, V=enc_output)
             outputs = self.last_linear(dec_output)
             outputs = self.last_softmax(outputs)

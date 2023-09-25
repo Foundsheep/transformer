@@ -23,7 +23,8 @@ def convert_to_ds(ko_tokenized, en_tokenized):
     print(f"ko_inputs shape : {ko_inputs.shape}")
     print(f"en_inputs shape : {en_inputs.shape}")
     print(f"en_labels shape : {en_labels.shape}")
-    ds = tf.data.Dataset.from_tensor_slices(((ko_inputs, en_inputs), en_labels))
+    ds = tf.data.Dataset.from_tensor_slices((ko_inputs, en_inputs, en_labels))
+    print(f"ds : {ds}")
     return ds
 
 
